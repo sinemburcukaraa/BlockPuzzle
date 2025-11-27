@@ -4,8 +4,8 @@ using UnityEngine;
 public class GridManager : MonoBehaviour
 {
     [Header("Grid Settings")]
-    public int Width = 10;
-    public int Height = 10;
+    public int Width = 4;
+    public int Height = 4;
     public float CellSize = 1f;
     public Transform BlocksParent;
     public GameObject tilePrefab;
@@ -14,6 +14,13 @@ public class GridManager : MonoBehaviour
 
     void Awake()
     {
+        // Jelly Field tarzı koyu arka plan
+        if (Camera.main != null)
+        {
+            Camera.main.backgroundColor = new Color(0.15f, 0.15f, 0.25f); // Koyu Lacivert/Mor
+            Camera.main.clearFlags = CameraClearFlags.SolidColor;
+        }
+
         InitializeGrid();
         SpawnTiles();
         // CenterCameraPositionOnGrid();
@@ -57,7 +64,20 @@ public class GridManager : MonoBehaviour
             if (block == null)
                 block = go.AddComponent<Block>();
                 
-            block.Initialize(shape.Type);
+            if (shape.SubTypes != null && shape.SubTypes.Length > 0)
+            {
+                // Compact mod (çok renkli) ise renkleri koru
+                block.InitializeCompact(shape.SubTypes);
+            }
+            else
+            {
+                // Normal mod
+                block.Initialize(shape.Type);
+            }
+            
+            // Jöle efekti: Yerleşince titresin
+            block.TriggerJellyEffect();
+            
             grid[x, y].Block = block;
         }
     }
@@ -85,13 +105,15 @@ public class GridManager : MonoBehaviour
 
     public bool CanPlace(ShapeData shape, int startX, int startY)
     {
+        if (grid == null) return false;
+
         foreach (var offset in shape.Blocks)
         {
             int x = startX + offset.x;
             int y = startY + offset.y;
             if (!InBounds(x, y))
                 return false;
-            if (grid[x, y].IsFilled)
+            if (grid[x, y] == null || grid[x, y].IsFilled)
                 return false;
         }
         return true;
