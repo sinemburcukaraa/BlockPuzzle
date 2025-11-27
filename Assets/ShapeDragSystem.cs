@@ -20,45 +20,65 @@ public class ShapeDragSystem : MonoBehaviour
 
     void Update()
     {
-        // Mouse yoksa (mobile’da olabilir) null check
-        if (Mouse.current == null)
+        // Pointer (Mouse/Touch/Pen) yoksa çık
+        if (Pointer.current == null)
             return;
 
-        // Sol tık basıldı -> Drag başlat
-        if (Mouse.current.leftButton.wasPressedThisFrame)
+        // Basıldı -> Drag başlat
+        if (Pointer.current.press.wasPressedThisFrame)
             TryStartDragging();
 
-        // Sol tık hala basılı -> Drag devam
-        if (dragging && Mouse.current.leftButton.isPressed)
+        // Basılı tutuluyor -> Drag devam
+        if (dragging && Pointer.current.press.isPressed)
             Dragging();
 
-        // Sol tık bırakıldı -> Drag bitir
-        if (dragging && Mouse.current.leftButton.wasReleasedThisFrame)
+        // Bırakıldı -> Drag bitir
+        if (dragging && Pointer.current.press.wasReleasedThisFrame)
             StopDragging();
     }
 
     void TryStartDragging()
     {
-        Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
+        Ray ray = cam.ScreenPointToRay(Pointer.current.position.ReadValue());
         if (Physics.Raycast(ray, out RaycastHit hit))
         {
-            if (hit.transform == transform)
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
             {
                 dragging = true;
-                offset = transform.position - hit.point;
+                
+                // Tıklanan noktanın yerdeki izdüşümünü bul
+                // hit.point zaten collider üzerinde. Collider'lar bloklarda.
+                // Bizim için önemli olan "Shape Pivot"unun yerdeki karşılığı ile hit.point arasındaki fark.
+                
+                // Ancak daha basit bir yöntem:
+                // Mouse'un yer düzlemindeki pozisyonunu bul.
+                Plane plane = new Plane(Vector3.up, new Vector3(0, transform.position.y, 0));
+                if (plane.Raycast(ray, out float dist))
+                {
+                    Vector3 hitPointOnPlane = ray.GetPoint(dist);
+                    offset = transform.position - hitPointOnPlane;
+                }
+                
+                // Görsel olarak yukarı kaldır
+                transform.position += Vector3.up * 2f;
             }
         }
     }
 
     void Dragging()
     {
-        Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
-
-        Plane plane = new Plane(Vector3.up, Vector3.zero);
+        Ray ray = cam.ScreenPointToRay(Pointer.current.position.ReadValue());
+        
+        // Yer düzleminde (y=0 değil, objenin orijinal yüksekliği neyse o, ama biz y=0 varsayalım ya da Grid yüksekliği)
+        float gridY = Game.Grid.transform.position.y;
+        Plane plane = new Plane(Vector3.up, new Vector3(0, gridY, 0));
 
         if (plane.Raycast(ray, out float distance))
         {
-            transform.position = ray.GetPoint(distance) + offset;
+            Vector3 targetPoint = ray.GetPoint(distance) + offset;
+            
+            // Görsel olarak havada tut
+            transform.position = targetPoint + Vector3.up * 2f;
         }
     }
 
@@ -66,13 +86,48 @@ public class ShapeDragSystem : MonoBehaviour
     {
         dragging = false;
 
-        Vector3 world = transform.position;
-        var (gx, gy) = Game.Grid.WorldToGrid(world);
+        // Mantıksal pozisyon (Görsel pozisyon - Lift miktarı)
+        Vector3 logicalPos = transform.position - Vector3.up * 2f;
+        
+        var (gx, gy) = Game.Grid.WorldToGrid(logicalPos);
 
-        // Grid kontrol
-        if (Game.Grid.CanPlace(Data, gx, gy))
+        // Fuzzy Placement: Sadece tam tıklanan hücreye değil, etrafındaki hücrelere de bak.
+        // Kullanıcı biraz kaydırırsa en yakın geçerli noktayı bulsun.
+        
+        float bestDistance = float.MaxValue;
+        Vector2Int bestCoords = new Vector2Int(-1, -1);
+        bool foundValid = false;
+
+        // 3x3'lük bir alanda en iyi (en yakın ve geçerli) noktayı ara
+        for (int x = gx - 1; x <= gx + 1; x++)
         {
-            Game.TryPlaceShape(Data, gx, gy);
+            for (int y = gy - 1; y <= gy + 1; y++)
+            {
+                print("x: " + x + " y: " + y);
+            
+                if (Game.Grid.CanPlace(Data, x, y))
+                {
+                    print("can place");
+                    // Bu hücrenin dünya koordinatını al (Pivot'un olması gereken yer)
+                    Vector3 cellWorldPos = Game.Grid.GridToWorld(x, y);
+                    
+                    // Yüksekliği yoksayarak mesafe ölç (XZ düzleminde)
+                    float dist = Vector3.Distance(new Vector3(logicalPos.x, 0, logicalPos.z), new Vector3(cellWorldPos.x, 0, cellWorldPos.z));
+                    
+                    if (dist < bestDistance)
+                    {
+                        bestDistance = dist;
+                        bestCoords = new Vector2Int(x, y);
+                        foundValid = true;
+                        print("best coords: " + bestCoords.x + " " + bestCoords.y);
+                    }
+                }
+            }
+        }
+
+        if (foundValid)
+        {
+            Game.TryPlaceShape(Data, bestCoords.x, bestCoords.y);
             Destroy(gameObject);
         }
         else

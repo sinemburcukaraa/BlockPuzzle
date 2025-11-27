@@ -49,10 +49,14 @@ public class GridManager : MonoBehaviour
 
             var prefab = shape.BlockPrefab;
             var world = GridToWorld(x, y);
-            var go = Instantiate(prefab, world, Quaternion.identity, BlocksParent);
-            var block = go.GetComponent<Block>();
+            
+            // Prefab'i sahneye instantiate etmemiz lazım
+            GameObject go = Instantiate(prefab, world, Quaternion.identity, BlocksParent);
+            
+            Block block = go.GetComponent<Block>();
             if (block == null)
                 block = go.AddComponent<Block>();
+                
             block.Initialize(shape.Type);
             grid[x, y].Block = block;
         }

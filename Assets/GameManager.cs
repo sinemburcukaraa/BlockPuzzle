@@ -46,7 +46,9 @@ public class GameManager : MonoBehaviour
             // BLOKLARI SHAPE İÇİNE KOY
             foreach (var offset in data.Blocks)
             {
-                Vector3 pos = shapeObj.transform.position + new Vector3(offset.x, 0, offset.y);
+                // CellSize'ı hesaba kat!
+                Vector3 pos = shapeObj.transform.position + 
+                              new Vector3(offset.x * Grid.CellSize, 0, offset.y * Grid.CellSize);
 
                 Instantiate(data.BlockPrefab, pos, Quaternion.identity, shapeObj.transform);
             }
@@ -64,10 +66,12 @@ public class GameManager : MonoBehaviour
         Grid.PlaceShape(shape, startX, startY);
 
         var groups = Match.EvaluateMatches();
-        if (groups.Count > 0)
-            Match.RemoveGroups(groups);
+        // if (groups.Count > 0)
+        //     Match.RemoveGroups(groups);
 
-        NextTurn();
+            print("next turn");
+
+        // NextTurn();
         return true;
     }
 }
